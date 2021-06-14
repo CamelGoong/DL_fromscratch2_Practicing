@@ -1,0 +1,115 @@
+import numpy as np
+x = np.array([1,2,3])
+print(x.__class__)
+print(x.shape)
+print(x.ndim)
+
+W = np.array([[1,2,3], [4,5,6]])
+print(W.shape)
+print(W.ndim)
+
+W = np.array([[1,2,3], [4,5,6]])
+X = np.array([[0,1,2], [3,4,5]])
+print(W*X)
+
+# 행렬의 곱
+A = np.array([[1,2], [3,4]])
+B = np.array([[5,6], [7,8]])
+np.matmul(A, B)
+
+import numpy as np
+def sigmoid(x):
+  return 1 / (1 + np.exp(-x))
+  
+# 시그모이드 함수 계층 구현
+import numpy as np
+class Sigmoid:
+  def __init__(self):
+    self.params = []
+
+  def forward(self, x):
+    return 1 / (1 + np.exp(-x))
+
+# Affine 계층 구현
+class Affine:
+  def __init__(self, W, b):
+    self.params =[W, b]
+  
+  def forward(self, x):
+    W,b = self.params
+    out = np.matmul(x, W) + b
+    return out
+# TwoLayerNet 클래스 구현
+class TwoLayerNet:
+  def __init__(self, input_size, hidden_size, output_size):
+    I, H, O = input_size, hidden_size, output_size
+    # 가중치와 편향 초기화
+    W1 = np.random.randn(I, H)
+    b1 = np.random.randn(H)
+    W2 = np.random.randn(H, O)
+    b2 = np.random.randn(O)
+
+    # 계층 생성
+    self.layers = [
+        Affine(W1, b1),
+        Sigmoid(),
+        Affine(W2, b2)
+    ]
+
+    # 모든 가중치를 리스트에 모으기
+    self.params = []
+    for layer in self.layers:
+      self.params += layer.params
+    
+  def predict(self, x):
+    for layer in self.layers:
+        x = layer.forward(x)
+    return x
+
+# TwoLayerNet 추론 수행
+x = np.random.randn(10,2)
+model = TwoLayerNet(2, 4, 3)
+s = model.predict(x)
+print(s)
+
+# Repeat 노드 구현
+import numpy as np
+D, N = 8, 7
+x = np.random.randn(1, D)
+y = np.repeat(x, N, axis = 0)
+dy = np.random.randn(N, D) # 무작위 기울기를 설정.
+dx = np.sum(dy, axis = 0, keepdims = True)
+
+print(dx)
+
+# Sum 노드 구현
+import numpy as np
+D, N = 8, 7
+x = np.random.randn(N,D)
+y = np.sum(x, axis = 0, keepdims = True)
+
+dy = np.random.randn(1, D) # 무작위로 기울기 설정.
+dx = np.repeat(dy, N, axis = 0)
+print(dx)
+
+# MatMul class 구현
+import numpy as np
+class MatMul:
+  def __init__(self, W):
+    self.params = [W]
+    self.x = None
+    self.grads = [np.zeros_like(W)]
+
+  def forward(self, x):
+    W, = self.params
+    out = np.matmul(x, W)
+    self.x = x
+
+    return out
+  
+  def backward(self, dout):
+    W, = self.params
+    dx = np.matmul(dout, W.T)
+    dy = np.matmul(x.T, dout)
+    self.grads[0][...] = dW
+    return dx
