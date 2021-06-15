@@ -1,0 +1,58 @@
+# 간단한 문장 전처리
+text = 'You say goodbye and I say hello.'
+text = text.lower() # 모든 문자 소문자로 변환하고, 다시 text로 넣어줘야 함.
+text = text.replace(".", " .")
+words = text.split(" ")
+print(words)
+
+# 단어에 ID 부여하고, 단어ID와 단어의 대응표 작성하기
+word_to_id = {} # 딕셔너리 형태
+id_to_word = {}
+
+for word in words:
+  if word not in word_to_id:
+    new_id = len(word_to_id)
+    word_to_id[word] = new_id
+    id_to_word[new_id] = word
+
+print(id_to_word)
+print(word_to_id)
+
+# id로 단어 검색
+print(id_to_word[1])
+
+# 단어로 id 검색
+print(word_to_id['hello'])
+
+# 단어목록 -> 단어ID목록 -> 넘파이 배열 로 변환.
+import numpy as np
+corpus = [word_to_id[w] for w in words]
+print(corpus)
+corpus = np.array(corpus)
+print(corpusm)
+
+# 위의 일련의 과정들을 def preprocess 라는 하나의 함수로 귀현
+def preprocess(text):
+  # 기본 전처리
+  text = text.lower()
+  text = text.replace(".", " .")
+  words = text.split(" ")
+  
+  # 단어, ID 대응 목록 형성
+  word_to_id = {}
+  id_to_word = {}
+  for word in words:
+    if word not in word_to_id:
+      new_id = len(word_to_id)
+      word_to_id[word] = new_id
+      id_to_word[new_id] = word
+
+  # corpus(말뭉치) 형성
+  corpus = np.array([word_to_id[w] for w in words])
+
+  return corpus, word_to_id, id_to_word
+
+# def preprocess Test
+text = "What I want to do in the future is to do the fabulous things for the society. And I am just a senior university student for now."
+
+preprocess(text)
