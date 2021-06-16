@@ -1,0 +1,90 @@
+# 단어 원핫 벡터들을 완경연결계층을 통해서 변환
+import numpy as np
+c = np.array([[1, 0, 0, 0, 0, 0, 0]]) #. 단어 입력
+W = np.random.randn(7, 3) # 가중치
+h = np.matmul(c, W) # 중간노드
+print(h)
+print(c.ndim)
+
+# CBOW 모델의 추론처리 구현
+
+import numpy as np
+
+# 샘플 맥락 데이터
+c0 = np.array([[1, 0, 0, 0, 0, 0, 0]])
+c1 = np.array([[0, 0, 1, 0, 0, 0, 0]])
+
+# 가중치 초기화
+W_in = np.random.randn(7,3)
+W_out = np.random.randn(3,7)
+
+# 계층 생성
+in_layer0 = MatMul(W_in)
+in_layer1 = MatMul(W_in)
+out_layer = MatMul(W_out)
+
+# 순전파
+h0 = in_layer0.forward(c0)
+h1 = in_layer1.forward(c1)
+h = 0.5 * (h0 + h1)
+s = out_layer.forward(h) # s는 score를 의미
+
+print(s)
+
+# 말뭉치 텍스트를 단어 ID로 변환
+text = 'You say goodbye and I say hello.'
+corpus, word_id, id_to_word = preprocess(text)
+print(corpus)
+print(id_to_word)
+
+# create_contexts_target 함수 구현
+import numpy as np
+
+def create_contexts_target(corpus, window_size = 1):
+  target = corpus[window_size : -window_size] # 타깃 배열 추출
+  contexts = [] # 최종적으로 contexts를 담을 list -> 후에 return할 때, array 형태로 반환 예정
+
+  for idx in range(window_size, len(corpus) - window_size):
+    cs = [] # contexts에 담기전 임시적으로 contexts를 담는 곳.
+    for t in range(-window_size, window_size + 1):
+      if t == 0:
+        continue
+
+      cs.append(corpus[idx + t])
+    
+    contexts.append(cs)
+  
+  return np.array(contexts), np.array(target)
+
+# 함수 테스트
+contexts, target = create_contexts_target(corpus, window_size = 1)
+
+print('contexts\n', contexts)
+print(f'shape: {contexts.shape}')
+print('target\n', target)
+print(f'target: {target.shape}')
+
+# 이미 있는 conver_one_hot 함수 import
+import numpy as np
+def convert_one_hot(corpus, vocab_size):
+
+    N = corpus.shape[0]
+
+    if corpus.ndim == 1:
+        one_hot = np.zeros((N, vocab_size), dtype=np.int32)
+        for idx, word_id in enumerate(corpus):
+            one_hot[idx, word_id] = 1
+
+    elif corpus.ndim == 2:
+        C = corpus.shape[1]
+        one_hot = np.zeros((N, C, vocab_size), dtype=np.int32)
+        for idx_0, word_ids in enumerate(corpus):
+            for idx_1, word_id in enumerate(word_ids):
+                one_hot[idx_0, idx_1, word_id] = 1
+
+    return one_hot
+# 함수 테스트
+contexts = convert_one_hot(contexts, vocab_size)
+target = convert_one_hot(target, vocab_size)
+print(contexts)
+print(target)
