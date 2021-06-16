@@ -1,4 +1,4 @@
-# 단어 원핫 벡터들을 완경연결계층을 통해서 변환
+# 단어 원핫 벡터들을 완전연결계층을 통해서 변환
 import numpy as np
 c = np.array([[1, 0, 0, 0, 0, 0, 0]]) #. 단어 입력
 W = np.random.randn(7, 3) # 가중치
@@ -88,3 +88,143 @@ contexts = convert_one_hot(contexts, vocab_size)
 target = convert_one_hot(target, vocab_size)
 print(contexts)
 print(target)
+
+
+# CBOW 모델 구현
+import numpy as np
+
+class SimpleCBOW:
+  def __init__(self, vocab_size, hidden_size):
+    V, H = vocab_size, hidden_size
+
+    # 가중치 초기화
+    W_in = np.random.randn(V, H).astype('f')
+    W_out = np.random.randn(H, V).astype('f')
+
+    # 계층 생성
+    self.in_layer0 = MatMul(W_in)
+    self.in_layer1 = MatMul(W_in)
+    self.out_layer = MatMul(W_out)
+    self.loss_layer = SoftmaxWithLoss() # 가중치가 필요없음.
+
+    # 모든 가중치와 기울기를 리스트에 모은다.
+    layers = [self.in_layer0, self.in_layer1, self.out_layer] # 마지막 계층인 self.loss_layer는 여기서 모으지 않음.
+    self.params, self.grads = [], []
+    for layer in layers:
+      self.params += layer.params
+      self.grads += layer.grads
+
+    # 인스턴스 변수에 단어의 분산 표현을 저장.
+    self.word_vecs = W_in
+
+  # 신경망의 순전파 forward 메서드 형성
+  def forward(self, contexts, target):
+    h0 = self.in_layer0.forward(contexts[:, 0])
+    h1 = self.in_layer1.forward(contexts[:, 1])
+    h = (h0 + h1) * 0.5
+    score = self.out_layer.forward(h)
+    loss = self.loss_layer.forward(score, target)
+  
+  # 신경망의 역전파 backward 메서드 생성
+  def backward(self, dout= 1):
+    ds = self.loss_layer.backward(dout)
+    da = self.out_layer.backward(ds)
+    da *= 0.5
+    self.in_layer1.backward(da)
+    self.in_layer0.backward(da)
+    return None
+    
+ # Adam import
+class Adam:
+    '''
+    Adam (http://arxiv.org/abs/1412.6980v8)
+    '''
+    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999):
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.iter = 0
+        self.m = None
+        self.v = None
+        
+    def update(self, params, grads):
+        if self.m is None:
+            self.m, self.v = [], []
+            for param in params:
+                self.m.append(np.zeros_like(param))
+                self.v.append(np.zeros_like(param))
+        
+        self.iter += 1
+        lr_t = self.lr * np.sqrt(1.0 - self.beta2**self.iter) / (1.0 - self.beta1**self.iter)
+
+        for i in range(len(params)):
+            self.m[i] += (1 - self.beta1) * (grads[i] - self.m[i])
+            self.v[i] += (1 - self.beta2) * (grads[i]**2 - self.v[i])
+            
+            params[i] -= lr_t * self.m[i] / (np.sqrt(self.v[i]) + 1e-7)
+
+# simple_cbow import
+class SimpleCBOW:
+    def __init__(self, vocab_size, hidden_size):
+        V, H = vocab_size, hidden_size
+
+        # 가중치 초기화
+        W_in = 0.01 * np.random.randn(V, H).astype('f')
+        W_out = 0.01 * np.random.randn(H, V).astype('f')
+
+        # 계층 생성
+        self.in_layer0 = MatMul(W_in)
+        self.in_layer1 = MatMul(W_in)
+        self.out_layer = MatMul(W_out)
+        self.loss_layer = SoftmaxWithLoss()
+
+        # 모든 가중치와 기울기를 리스트에 모은다.
+        layers = [self.in_layer0, self.in_layer1, self.out_layer]
+        self.params, self.grads = [], []
+        for layer in layers:
+            self.params += layer.params
+            self.grads += layer.grads
+
+        # 인스턴스 변수에 단어의 분산 표현을 저장한다.
+        self.word_vecs = W_in
+
+    def forward(self, contexts, target):
+        h0 = self.in_layer0.forward(contexts[:, 0])
+        h1 = self.in_layer1.forward(contexts[:, 1])
+        h = (h0 + h1) * 0.5
+        score = self.out_layer.forward(h)
+        loss = self.loss_layer.forward(score, target)
+        return loss
+
+    def backward(self, dout=1):
+        ds = self.loss_layer.backward(dout)
+        da = self.out_layer.backward(ds)
+        da *= 0.5
+        self.in_layer1.backward(da)
+        self.in_layer0.backward(da)
+        return None
+
+# CBOW 모델 학습코드 구현
+window_size = 1
+hidden_size = 5
+batch_size = 3
+max_epoch = 1000
+
+text = "You say goodbye and I say hello."
+corpus, word_to_id, id_to_word = preprocess(text)
+
+vocab_size = len(word_to_id)
+contexts, target = create_contexts_target(corpus, window_size)
+target = convert_one_hot(target, vocab_size)
+contexts = convert_one_hot(contexts, vocab_size)
+
+model = SimpleCBOW(vocab_size, hidden_size)
+optimizer = Adam()
+trainer = Trainer(model, optimizer)
+
+trainer.fit(contexts, target, max_epoch, batch_size)
+trainer.plot()
+
+word_vecs = model.word_vecs
+for word_id, word in id_to_word.items():
+  print(word, word_vecs[word_id])
