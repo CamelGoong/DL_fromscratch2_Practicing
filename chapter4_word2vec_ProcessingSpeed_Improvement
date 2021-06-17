@@ -1,0 +1,304 @@
+import numpy as np
+W = np.arange(21).reshape(7,3) # 파이썬 list의 range랑 기능 동일.
+print(W)
+# 3행 추출
+print('2행 추출 \n', W[2])
+
+# 원하는 행들 한번에 추출
+idx = np.array([1, 0, 3, 0])
+print(W[idx])
+
+# Embedding 계층 구현
+import numpy as np
+class Embedding:
+  def __init__(self, W):
+    self.params = [W] # 리스트 형태로 W 저장.
+    self.grads = np.zeros_like(W)
+    self.idx = None
+  
+  def forward(self, idx):
+    W, = self.params
+    self.idx = idx
+    out = W[idx]
+    
+    return out
+  
+  def backward(self, dout):
+    dW, = self.grads
+    dW[...] = 0 # 0으로 초기화
+    np.add.at(dW, self.idx, dout)
+    return None
+
+''' 이렇게 for문으로도 구성할 수 있지만, 최적화가 되어있는 넘파이 메서드를 활용하는 것이 더 효율적
+    for i, word_id in enumerate(self,idx):
+      dW[word_id] += dout[i]
+'''    
+
+   # dW의 self.idx 행에 dout을 더해주는 메서드
+
+  
+''' 좋지 못한 예이기 때문에 backward() 수정!!
+
+  def backward(self, dout):
+    dW, = self.grads
+    dW[...] = 0
+    dW[self.idx] = dout
+    
+    return None
+
+'''
+
+# EmbeddingDot 계층 구현
+class EmbeddingDot:
+    def __init__(self, W):
+        self.embed = Embedding(W)
+        self.params = self.embed.params
+        self.grads = self.embed.grads
+        self.cache = None
+
+    def forward(self, h, idx):
+        target_W = self.embed.forward(idx)
+        out = np.sum(target_W * h, axis=1)
+
+        self.cache = (h, target_W)
+        return out
+
+    def backward(self, dout):
+        h, target_W = self.cache
+        dout = dout.reshape(dout.shape[0], 1)
+
+        dtarget_W = dout * h
+        self.embed.backward(dtarget_W)
+        dh = dout * target_W
+        return dh
+
+# np.random.choice() 메서드를 활용한 네거티브 샘플링 연습
+import numpy as np
+# 0~9 사이의 숫자 무작위로 1개 샘플링
+np.random.choice(10)
+
+# Words에서 하나만 무작위로 샘플링
+words = ['you', 'say', 'goodbye', 'I', 'hello', '.']
+np.random.choice(words)
+
+# 5개만 무작위로 샘플링(중복있음.)
+np.random.choice(words, size = 5)
+
+# 5개만 무작위로 샘플링(중복없음.)
+np.random.choice(words, size = 5, replace = False)
+
+# 확률 분포에 따라 샘플링
+p = [0.5, 0.1, 0.05, 0.2, 0.05, 0.1]
+np.random.choice(words, p = p)
+
+# word2vec에서 네거티브 샘플링할 때, 확률분포에 0.75를 곱하는 것을 권고하는 이유
+p = [0.7, 0.29, 0.01]
+new_p = np.power(p, 0.75)
+new_p /= np.sum(new_p)
+print(new_p)
+
+# import GPU
+GPU = False
+
+# UnigramSampler Import
+class UnigramSampler:
+    def __init__(self, corpus, power, sample_size):
+        self.sample_size = sample_size
+        self.vocab_size = None
+        self.word_p = None
+
+        counts = collections.Counter()
+        for word_id in corpus:
+            counts[word_id] += 1
+
+        vocab_size = len(counts)
+        self.vocab_size = vocab_size
+
+        self.word_p = np.zeros(vocab_size)
+        for i in range(vocab_size):
+            self.word_p[i] = counts[i]
+
+        self.word_p = np.power(self.word_p, power)
+        self.word_p /= np.sum(self.word_p)
+
+    def get_negative_sample(self, target):
+        batch_size = target.shape[0]
+
+        if not GPU:
+            negative_sample = np.zeros((batch_size, self.sample_size), dtype=np.int32)
+
+            for i in range(batch_size):
+                p = self.word_p.copy()
+                target_idx = target[i]
+                p[target_idx] = 0
+                p /= p.sum()
+                negative_sample[i, :] = np.random.choice(self.vocab_size, size=self.sample_size, replace=False, p=p)
+        else:
+            # GPU(cupy）로 계산할 때는 속도를 우선한다.
+            # 부정적 예에 타깃이 포함될 수 있다.
+            negative_sample = np.random.choice(self.vocab_size, size=(batch_size, self.sample_size),
+                                               replace=True, p=self.word_p)
+
+        return negative_sample
+
+# 부정적 예 샘플링 예시
+import numpy as np
+import collections
+
+# UnigramSampler 클래스의 인수 지정
+corpus = np.array([0, 1, 2, 3, 4, 1, 2, 3])
+power = 0.75
+sample_size = 2
+
+sampler = UnigramSampler(corpus, power, sample_size) # 객체 선언
+target = np.array([1, 3, 0]) # 긍정적 예를 미니배치 형식으로
+negative_sample = sampler.get_negative_sample(target) # 메서드를 사용하여 부정적 예 선별
+print(negative_sample)
+
+# coding: utf-8
+import sys
+sys.path.append('..')
+from common.np import *  # import numpy as np
+from common.layers import Embedding, SigmoidWithLoss
+import collections
+
+
+class EmbeddingDot:
+    def __init__(self, W):
+        self.embed = Embedding(W)
+        self.params = self.embed.params
+        self.grads = self.embed.grads
+        self.cache = None
+
+    def forward(self, h, idx):
+        target_W = self.embed.forward(idx)
+        out = np.sum(target_W * h, axis=1)
+
+        self.cache = (h, target_W)
+        return out
+
+    def backward(self, dout):
+        h, target_W = self.cache
+        dout = dout.reshape(dout.shape[0], 1)
+
+        dtarget_W = dout * h
+        self.embed.backward(dtarget_W)
+        dh = dout * target_W
+        return dh
+
+
+class UnigramSampler:
+    def __init__(self, corpus, power, sample_size):
+        self.sample_size = sample_size
+        self.vocab_size = None
+        self.word_p = None
+
+        counts = collections.Counter()
+        for word_id in corpus:
+            counts[word_id] += 1
+
+        vocab_size = len(counts)
+        self.vocab_size = vocab_size
+
+        self.word_p = np.zeros(vocab_size)
+        for i in range(vocab_size):
+            self.word_p[i] = counts[i]
+
+        self.word_p = np.power(self.word_p, power)
+        self.word_p /= np.sum(self.word_p)
+
+    def get_negative_sample(self, target):
+        batch_size = target.shape[0]
+
+        if not GPU:
+            negative_sample = np.zeros((batch_size, self.sample_size), dtype=np.int32)
+
+            for i in range(batch_size):
+                p = self.word_p.copy()
+                target_idx = target[i]
+                p[target_idx] = 0
+                p /= p.sum()
+                negative_sample[i, :] = np.random.choice(self.vocab_size, size=self.sample_size, replace=False, p=p)
+        else:
+            # GPU(cupy）로 계산할 때는 속도를 우선한다.
+            # 부정적 예에 타깃이 포함될 수 있다.
+            negative_sample = np.random.choice(self.vocab_size, size=(batch_size, self.sample_size),
+                                               replace=True, p=self.word_p)
+
+        return negative_sample
+
+
+class NegativeSamplingLoss:
+    def __init__(self, W, corpus, power=0.75, sample_size=5):
+        self.sample_size = sample_size
+        self.sampler = UnigramSampler(corpus, power, sample_size)
+        self.loss_layers = [SigmoidWithLoss() for _ in range(sample_size + 1)]
+        self.embed_dot_layers = [EmbeddingDot(W) for _ in range(sample_size + 1)]
+
+        self.params, self.grads = [], []
+        for layer in self.embed_dot_layers:
+            self.params += layer.params
+            self.grads += layer.grads
+
+    def forward(self, h, target):
+        batch_size = target.shape[0]
+        negative_sample = self.sampler.get_negative_sample(target)
+
+        # 긍정적 예 순전파
+        score = self.embed_dot_layers[0].forward(h, target)
+        correct_label = np.ones(batch_size, dtype=np.int32)
+        loss = self.loss_layers[0].forward(score, correct_label)
+
+        # 부정적 예 순전파
+        negative_label = np.zeros(batch_size, dtype=np.int32)
+        for i in range(self.sample_size):
+            negative_target = negative_sample[:, i]
+            score = self.embed_dot_layers[1 + i].forward(h, negative_target)
+            loss += self.loss_layers[1 + i].forward(score, negative_label)
+
+        return loss
+
+    def backward(self, dout=1):
+        dh = 0
+        for l0, l1 in zip(self.loss_layers, self.embed_dot_layers):
+            dscore = l0.backward(dout)
+            dh += l1.backward(dscore)
+
+        return dh
+# NegativeSamplingLoss 클래스 구현
+class NegativeSamplingLoss:
+  def __init__(self, W, corpus, power = 0.75, sample_size = 5):
+    self.sample_size = sample_size
+    self.sampler = UnigramSampler(corpus, power, sample_size)
+    self.loss_layers = [SigmoidWithLoss() for _ in range(sample_size + 1)]
+    self.embed_dot_layers = [EmbeddingDot(W) for _ in range(sample_size + 1)]
+    self.params, self.grads = [], []
+    for layer in self.embed_dot_layers:
+      self.params += layer.params
+      self.grads += layer.grads
+  
+  def forward(self, h, target):
+    
+    # 긍정적 예 순전파
+    score = self.embed_dot_layers[0],forward(h, target)
+    correct_label = np.ones(batch_size, dtype = np.int32)
+    loss = self.loss_layers[0].forward(score, correct_label)
+
+    # 부정적 예 순전파
+    negative_label = np.zeros(batch_size, dtype = np.int32)
+    for i in range(self.sample_size):
+      negative_target = negative_sample[:, i]
+      score = self.embed_dot_layers[1 + i].forward(h, negative_target)
+      loss += self.loss_layers[1 + i].forward(score, negative_label)
+    
+    return loss
+
+  def backward(self, dout = 1):
+    dh = 0
+    for l0, l1 in zip(self.loss_layers, self.embed_dot_layers):
+      dscore = l0.backward(dout)
+      dh = l1.backward(dscore)
+
+      return dh
+  
+
