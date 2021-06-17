@@ -302,3 +302,193 @@ class NegativeSamplingLoss:
       return dh
   
 
+# NegativeSamplingLoss 클래스 구현
+class NegativeSamplingLoss:
+  def __init__(self, W, corpus, power = 0.75, sample_size = 5):
+    self.sample_size = sample_size
+    self.sampler = UnigramSampler(corpus, power, sample_size)
+    self.loss_layers = [SigmoidWithLoss() for _ in range(sample_size + 1)]
+    self.embed_dot_layers = [EmbeddingDot(W) for _ in range(sample_size + 1)]
+    self.params, self.grads = [], []
+    for layer in self.embed_dot_layers:
+      self.params += layer.params
+      self.grads += layer.grads
+  
+  def forward(self, h, target):
+    
+    # 긍정적 예 순전파
+    score = self.embed_dot_layers[0],forward(h, target)
+    correct_label = np.ones(batch_size, dtype = np.int32)
+    loss = self.loss_layers[0].forward(score, correct_label)
+
+    # 부정적 예 순전파
+    negative_label = np.zeros(batch_size, dtype = np.int32)
+    for i in range(self.sample_size):
+      negative_target = negative_sample[:, i]
+      score = self.embed_dot_layers[1 + i].forward(h, negative_target)
+      loss += self.loss_layers[1 + i].forward(score, negative_label)
+    
+    return loss
+
+  def backward(self, dout = 1):
+    dh = 0
+    for l0, l1 in zip(self.loss_layers, self.embed_dot_layers):
+      dscore = l0.backward(dout)
+      dh = l1.backward(dscore)
+
+      return dh
+  
+# CBOW 클래스 구현
+import numpy as np
+class CBOW:
+  def __init__(self, vocab_size, hidden_size, window_size, corpus):
+    V, H = vocab_size, hidden_size
+
+    # 가중치 초기화
+    W_in = 0.01 * np.random.randn(V, H).astype('f')
+    W_out = 0.01 * np.random.randn(V, H).astype('f')
+
+    # 계층 생성
+    self.in_layers = []
+    for i in range(2 * window_size):
+      layer = Embedding(W_in) # Embedding 계층 사용
+      self.in_layers.append(layer)
+    self.ns_loss = NegativeSamplingLoss(W_out, corpus, power = 0.75, sample_size = 5)
+
+    # 모든 가중치와 기울기를 배열에 모으기
+    layers = self.in_layers + [self.ns_loss] 
+    self.params, self.grads = [], []
+    for layer in layers:
+      self.params += layer.params
+      self.grads += layer.grads
+    
+    # 인스턴스 변수에 단어의 분산 표현을 저장
+    self.word_vecs = W_in
+
+  def forward(self, contexts, target):
+    h = 0 # 초기화
+    for i, layer in enumerate(self.in_layers):
+      h += layer.forward(contexts[:, i])
+    h *= 1 / len(self.in_layers) # 평균낸 것
+    loss = self.ns_loss.forward(h, target)
+    return loss
+
+  def backward(self, dout = 1):
+    dout = self.ns_loss.backward(dout)
+    dout *= 1 / len(self.in_layers)
+    for layer in self.in_layers:
+      layer.backward(dout)
+      return None
+
+# to_cpu, to_gpu import
+GPU = False
+def to_cpu(x):
+    import numpy
+    if type(x) == numpy.ndarray:
+        return x
+    return np.asnumpy(x)
+
+
+def to_gpu(x):
+    import cupy
+    if type(x) == cupy.ndarray:
+        return x
+    return cupy.asarray(x)
+
+import numpy as np
+#GPU에서 실행하려면 이 주석 해제하기. GPU = True
+import pickle
+import sys
+sys.path.append('/content/drive/My Drive')
+print(sys.path)
+import ptb
+
+# 본격적인 CBOW 모델 학습 코드 구현
+
+# 하이퍼파라미터 설정
+window_size = 2
+hidden_size = 3
+batch_size = 100
+max_epoch = 2
+
+# 데이터 읽기
+corpus, word_to_id, id_to_word = ptb.load_data('train')
+vocab_size = len(word_to_id)
+
+contexts, target = create_contexts_target(corpus, window_size)
+if GPU:
+  contexts, target = to_gpu(contexts), to_gpu(target)
+
+# 모델 등 생성
+model = CBOW(vocab_size, hidden_size, window_size, corpus)
+optimizer = Adam()
+trainer = Trainer(model, optimizer)
+
+# 학습 시작
+trainer.fit(contexts, target, max_epoch, batch_size)
+trainer.plot()
+
+# 나중에 사용할 수 있도록 데이터들 저장
+word_vecs = model.word_vecs
+if GPU:
+  word_vecs = to_cpu(word_vecs)
+params = {}
+params['word_vecs'] = word_vecs.astype(np.float16)
+params['word_to_id'] = word_to_id
+params['id_to_word'] = id_to_word
+pkl_file = 'cbow_params.pkl'
+with open(pkl_file, 'wb') as f:
+  pickle.dump(params, f, -1)
+
+# dlqnqns pickle 파일 불러오기가 안됨!
+import pickle
+from google.colab import files
+f = files.upload() # 파일 업로드 기능 실행
+
+# normalize import
+def normalize(x):
+    if x.ndim == 2:
+        s = np.sqrt((x * x).sum(1))
+        x /= s.reshape((s.shape[0], 1))
+    elif x.ndim == 1:
+        s = np.sqrt((x * x).sum())
+        x /= s
+    return x
+
+
+def analogy(a, b, c, word_to_id, id_to_word, word_matrix, top=5, answer=None):
+    for word in (a, b, c):
+        if word not in word_to_id:
+            print('%s(을)를 찾을 수 없습니다.' % word)
+            return
+
+    print('\n[analogy] ' + a + ':' + b + ' = ' + c + ':?')
+    a_vec, b_vec, c_vec = word_matrix[word_to_id[a]], word_matrix[word_to_id[b]], word_matrix[word_to_id[c]]
+    query_vec = b_vec - a_vec + c_vec
+    query_vec = normalize(query_vec)
+
+    similarity = np.dot(word_matrix, query_vec)
+
+    if answer is not None:
+        print("==>" + answer + ":" + str(np.dot(word_matrix[word_to_id[answer]], query_vec)))
+
+    count = 0
+    for i in (-1 * similarity).argsort():
+        if np.isnan(similarity[i]):
+            continue
+        if id_to_word[i] in (a, b, c):
+            continue
+        print(' {0}: {1}'.format(id_to_word[i], similarity[i]))
+
+        count += 1
+        if count >= top:
+            return
+
+# 함수 테스트
+analogy('man', 'king', 'woman', word_to_id, id_to_word, word_vecs, top = 5)
+
+# 유추문제 4개 풀기
+analogy('king', 'man', 'queen', word_to_id, id_to_word, word_vecs)
+analogy('take', 'took', 'go', word_to_id, id_to_word, word_vecs)
+analogy('car', 'cars', 'child', word_to_id, id_to_word, word_vecs)
+analogy('good', 'better', 'bad', word_to_id, id_to_word, word_vecs)
