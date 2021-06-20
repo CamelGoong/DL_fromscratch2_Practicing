@@ -1,0 +1,85 @@
+# Rnnlm 클래스를 상속하여 RnnlmGen 클래스 구현
+import numpy as np
+class RnnlmGen(Rnnlm):
+  def generate(self, start_id, skip_ids, sample_size = 100):
+    word_ids = [start_id]
+    x = start_id
+    
+    while len(word_ids) < sample_size:
+      x = np.array(x).reshape(1,1)
+      score = self.predict(x)
+      p = softmax(score.flatten())
+
+      sampled = np.random.choice(len(p), size = 1, p = p)
+      if(skip_ids is None) or (sampled not in skip_ids):
+        x = sampled
+        word_ids.append(int(x))
+    return word_ids
+import sys
+print(sys.path)
+# 기존에 저장된 pkl 파일을 이용한 구현은 따로 python idle로 하였음.(성공)
+# RnnlmGen을 활용하여 문장
+corpus, word_to_id, id_to_word = ptb.load_data('train')
+vocab_size = len(word_to_id)
+corpus_size = len(corpus)
+
+model = RnnlmGen()
+# model.load_params(f)
+#시작 문자와 건너뜀 문자 설정
+start_word = 'you'
+start_id = word_to_id[start_word]
+skip_words = ['N', '<unk>', '$']
+skip_ids = [word_to_id[w] for w in skip_words]
+
+# 문장 생성
+word_ids = model.generate(start_id, skip_ids)
+txt = ' '.join([id_to_word[i] for i in word_ids])
+print(txt)
+
+import sys
+sys.path.append('/content/drive/MyDrive')
+print(sys.path)
+import sequence
+(x_train, t_train), (x_test, t_test) = sequence.load_data('addition.txt', seed = 1984)
+char_to_id, id_to_char = sequence.get_vocab()
+
+print(x_train.shape, t_train.shape)
+print(x_test.shape, t_test.shape)
+
+print(x_train[0])
+print(t_train[0])
+print(''.join([id_to_char[c] for c in x_train[0]]))
+print(''.join([id_to_char[c] for c in t_train[0]]))
+
+# Encdoer 클래스 구현
+import numpy as np
+class Encoder:
+  def __init__(self, vocab_size, wordvec_size, hidden_size):
+    V, D, H = vocab_size, wordvec_size, hidden_size
+    rn = np.random.randn
+
+    embed_W = (rn(V, D) / 100).astype('f')
+    lstm_Wx = (rn(D, 4*H) / np.sqrt(D)).astype('f')
+    lstm_Wh = (rn(H, 4*H) / np.sqrt(H)).astype('f')
+    lstm_b = np.zeros(4*H). astype('f')
+
+    self.embed = TimeEmbedding(embed_W)
+    self.lstm = TimeLSTM(lstm_Wx, lstm_wh, lstm_b, stateful = False)
+
+    self.params = self.embed.params + self.lstm.params
+    self.grads = self.embed.grads + self.lstm.grads
+    self.hs = None
+
+  def forward(self, xs):
+    xs = self.embed.forward(xs)
+    hs = self.lstm.forward(xs)
+    self.hs = hs
+    return hs[:, -1, :]
+
+  def backward(self, dh):
+    dhs = np.zeros_like(self.hs)
+    dhs[:, -1, :] = dh
+
+    dout = self.lstm.backward(dhs)
+    dout = self.embed.backward(dout)
+    return dout
